@@ -1193,90 +1193,79 @@ if st.session_state.analysis_requested:
         unsafe_allow_html=True
     )
 
+    # Split participants using the median phone usage.
+    # This makes the groups depend on the entered dataset instead
+    # of using a fixed 2-hour threshold.
+    usage_median = phone.median()
 
-    threshold = 2
+    low_mask = phone <= usage_median
+    high_mask = phone > usage_median
 
+    low = analysis_data.loc[low_mask].copy()
+    high = analysis_data.loc[high_mask].copy()
 
-    low = analysis_data[
-        phone < threshold
-    ]
+    # Calculate the average sleep duration for each group.
+    low_avg_sleep = low["Sleep Duration (hours)"].mean()
+    high_avg_sleep = high["Sleep Duration (hours)"].mean()
 
+    # Show group sizes so it is clear how participants were divided.
+    group_col1, group_col2 = st.columns(2)
 
-    high = analysis_data[
-        phone >= threshold
-    ]
+    with group_col1:
+        st.metric("Low Usage Participants", len(low))
 
+    with group_col2:
+        st.metric("High Usage Participants", len(high))
 
-    group_names = []
+    if len(low) > 0 and len(high) > 0:
+        group_names = ["Low Usage", "High Usage"]
+        group_values = [low_avg_sleep, high_avg_sleep]
 
-    group_values = []
+        fig2, ax2 = plt.subplots(figsize=(7, 4))
 
-
-    if len(low) > 0:
-
-        group_names.append(
-            "Low Usage"
-        )
-
-        group_values.append(
-            low[
-                "Sleep Duration (hours)"
-            ].mean()
-        )
-
-
-    if len(high) > 0:
-
-        group_names.append(
-            "High Usage"
-        )
-
-        group_values.append(
-            high[
-                "Sleep Duration (hours)"
-            ].mean()
-        )
-
-
-    if len(group_names) > 0:
-
-        fig2, ax2 = plt.subplots(
-            figsize=(6, 3.5)
-        )
-
-
-        ax2.bar(
+        bars = ax2.bar(
             group_names,
-            group_values
+            group_values,
+            color=["#C084C8", "#4C78A8"],
+            width=0.55
         )
 
-
-        ax2.set_ylabel(
-            "Average Sleep (hours)"
+        ax2.set_ylabel("Average Sleep (hours)")
+        ax2.set_title("Average Sleep by Phone Usage")
+        ax2.set_ylim(
+            0,
+            max(group_values) * 1.2 if max(group_values) > 0 else 1
         )
+        ax2.grid(axis="y", alpha=0.2)
+        ax2.set_axisbelow(True)
 
-
-        ax2.set_title(
-            "Average Sleep by Phone Usage"
-        )
-
-
-        ax2.grid(
-            axis="y",
-            alpha=0.15
-        )
-
+        # Display the average value above each bar.
+        for bar, value in zip(bars, group_values):
+            ax2.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                f"{value:.2f} hrs",
+                ha="center",
+                va="bottom",
+                fontweight="bold"
+            )
 
         fig2.tight_layout()
+        st.pyplot(fig2, use_container_width=False)
+        plt.close(fig2)
 
-
-        st.pyplot(
-            fig2,
-            use_container_width=False
+        st.caption(
+            f"Participants with phone usage at or below {usage_median:.2f} "
+            f"hours are grouped as Low Usage; participants above "
+            f"{usage_median:.2f} hours are grouped as High Usage."
         )
 
-
-        plt.close(fig2)
+    else:
+        st.warning(
+            "The data does not contain two distinct phone-usage groups. "
+            "Enter participants with different phone-usage values so the "
+            "application can compare Low Usage and High Usage."
+        )
 
 
     # =====================================================
@@ -1286,15 +1275,8 @@ if st.session_state.analysis_requested:
     if len(low) >= 2 and len(high) >= 2:
 
         t_stat, t_p = ttest_ind(
-
-            low[
-                "Sleep Duration (hours)"
-            ],
-
-            high[
-                "Sleep Duration (hours)"
-            ],
-
+            low["Sleep Duration (hours)"],
+            high["Sleep Duration (hours)"],
             equal_var=False
         )
 
